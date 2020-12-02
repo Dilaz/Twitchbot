@@ -1,9 +1,12 @@
 import { Logger } from 'tslog';
-import { Client, Options } from 'tmi.js';
+import { Client } from 'tmi.js';
 import { Channel } from './models/Channel';
 import { knexSnakeCaseMappers, Model } from 'objection';
 import * as Knex from 'knex';
 import { User } from './models/User';
+import { connect as amqpConnect, Connection, Channel as MqChannel } from 'amqplib'
+import { Url } from './models/Url';
+import { BannedWord } from './models/BannedWord';
 
 require('dotenv').config();
 
@@ -13,21 +16,31 @@ const defaultConnectionOptions = {
 };
 
 export class Bot {
-  protected readonly logger: Logger;
+  protected readonly mqChannelName = 'channels';
+  protected readonly banMessage = 'Spambot';
+  protected readonly logger: Logger = new Logger();
   protected readonly knex: Knex;
   protected client: Client;
-  protected channels: string[];
+  protected mqClient: Connection;
+  protected mqChannel: MqChannel;
+  private isConnected: boolean = false;
 
   protected people: Set<string> = new Set();
+  protected channels: Map<string, Channel> = new Map();
+  private seenPeople: Map<string, Date> = new Map();
+  private spambots: Set<string> = new Set();
+  private spamurls: Set<string> = new Set();
+  protected bannedWords: Array<string | RegExp> = [];
+  protected bannedWordsPerChannel: Map<string, Array<string | RegExp>> = new Map();
 
   constructor(private readonly connectionOptions: typeof defaultConnectionOptions = defaultConnectionOptions) {
-    this.logger = new Logger();
     this.logger.debug('Bot created!');
 
     this.knex = Knex({
       client: 'postgres',
 
       connection: {
+        debug: true,
         host: process.env.DB_HOST,
         port: Number(process.env.DB_PORT) || 5432,
         user: process.env.DB_USER,
@@ -37,26 +50,92 @@ export class Bot {
 
       ...knexSnakeCaseMappers(),
     });
+
+
   }
 
+  private async initMq() {
+    if (process.env.USE_MQ !== 'true') {
+      return;
+    }
+
+    this.mqClient = await amqpConnect(process.env.MQ_URL || 'amqp://localhost', 'heartbeat=60');
+
+    this.logger.debug('MQ connection opened');
+
+    this.mqChannel = await this.mqClient.createChannel();
+
+    this.logger.debug('MQ channel create');
+
+    await this.mqChannel.assertQueue(this.mqChannelName, { durable: true });
+
+    await this.mqChannel.consume(this.mqChannelName, (message) => {
+      this.logger.debug(`New message: ${message.content}`);
+      try {
+        const obj = JSON.parse(message.content.toString());
+        switch (obj.type) {
+          case 'newChannel':
+            this.newChannel(obj.name);
+            break;
+          case 'deleteChannel':
+            this.removeChannel(obj.name);
+            break;
+          default:
+            this.logger.warn(`Invalid message type: ${obj.type}`);
+            break;
+        }
+      } catch (e) {
+        this.logger.error(e.toString())
+      } finally {
+        this.mqChannel.ack(message);
+      }
+    }, { consumerTag: 'twitchbot' });
+  }
+
+  /**
+   * Init the tmi.js client
+   */
   private async initClient() {
     Model.knex(this.knex);
-    this.channels = (await Channel.query().select('name')).map(channel => `#${channel.name}`);
 
-    this.logger.info(`Found ${this.channels.length} channels`)
-    const users = await User.query().where('isBot', '=', false);
+    // Load channels
+    const channels = await Channel.query();
+    channels.forEach(channel => this.channels.set(`#${channel.name}`, channel));
+    this.logger.info(`Found ${this.channels.size} channels`)
+    channels.forEach(channel => this.bannedWordsPerChannel.set(channel.name, []));
 
-    users.forEach(user => this.people.add(user.name));
-    this.logger.info(`Found ${this.people.size} users`)
+    // Load users
+    const users = await User.query();
+    users.forEach(user => user.isBot ? this.spambots.add(user.name) : this.people.add(user.name));
+    this.logger.info(`Found ${this.people.size} users`);
+    this.logger.info(`Found ${this.spambots.size} spambots`);
+
+    // Load spam urls
+    const urls = await Url.query().where('spam', '=', true);
+    urls.forEach(url => this.spamurls.add(url.url));
+    this.logger.info(`Found ${this.spamurls.size} spam urls`);
+
+    // Load banned words
+    let regexes = 0;
+    const bannedWords = await BannedWord.query().withGraphFetched('channel');
+    bannedWords.forEach(word => {
+      const matchWord = word.regex ? new RegExp(word.str) : word.str;
+      regexes += word.regex ? 1 : 0;
+      if (!word.channel) {
+        this.bannedWords.push(matchWord)
+      } else {
+        this.bannedWordsPerChannel.get(word.channel.name).push(matchWord);
+      }
+    });
+    this.logger.info(`Found ${this.bannedWords.length} global banned words (${regexes} regex)`);
 
     this.client = Client({
-      options: { debug: true },
       identity: {
         username: 'Dbot',
         password: process.env.BOT_TOKEN,
       },
       connection: this.connectionOptions,
-      channels: this.channels,
+      channels: [...this.channels.keys()],
     });
 
 
@@ -67,29 +146,103 @@ export class Bot {
     this.client.on('join', this.onJoin);
   }
 
-  private checkForUrls(message: string) {
-    return message.match(/https?:\/\/[^ ]+\.ru/i) || message.match(/bigfollows/i);
+  /**
+   * Trigger to join to a new channel
+   * @param name Channel name
+   */
+  protected async newChannel(name: string) {
+    if (this.channels.has(name)) {
+      this.logger.warn(`Channel already exists: ${name}`)
+      return;
+    }
+    this.logger.info(`Joining a new channel: ${name}`)
+    this.client.join(name);
+
+    const channel = await Channel.query().insert({ name });
+    this.channels.set(name, channel);
+  }
+
+  /**
+   *Trigger to leave existing channel
+   * @param name Channel name
+   */
+  protected async removeChannel(name: string) {
+    this.logger.info(`Leaving channel: ${name}`)
+    this.client.part(name);
+
+    this.channels.delete(name);
+    await Channel.query().where('name', '=', name).delete();
+  }
+
+  /**
+   *
+   * @param channel
+   * @param message
+   */
+  private checkForBannedStrings(channel: string, message: string): boolean {
+    for (const word of this.bannedWords) {
+      if (message.match(word)) {
+        return true;
+      }
+    }
+
+    for (const word of this.bannedWordsPerChannel.get(channel)) {
+      if (message.match(word)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   protected onJoin = async (channel: string, username: string, self: boolean) => {
-    if (self) {
-      // return this.client.say(channel, 'Oh hello there!');
+    if (!self) {
+      this.logger.debug(`${username} joined ${channel}`);
     }
   }
 
+
+  /**
+   * Callback for new message
+   * @param channel
+   * @param tags
+   * @param message
+   * @param self
+   */
   protected onMessage = async (channel: string, tags: any, message: string, self: boolean) => {
     if (self) { return; }
 
     this.logger.info(`${tags['display-name']} -> ${channel}: ${message}`);
+
     if (this.people.has(tags.username)) { return; }
 
-    if (this.checkForUrls(message) && !tags.mod && !tags.vip) {
-      await this.client.timeout(channel, tags.username, 300, 'Spam');
+    if ((this.spambots.has(tags.username) || this.checkForBannedStrings(channel, message)) && !tags.mod && !tags.vip) {
+      const channelObj = this.channels.get(channel);
+      if (channelObj.settings?.timeoutOnly) {
+        await this.client.timeout(channel, tags.username, 300, this.banMessage);
+      } else {
+        await this.client.ban(channel, tags.username, this.banMessage);
+      }
       await User.query().insert({
         name: tags.username,
         lastSeenAt: new Date(),
         isBot: true,
       });
+
+      // Save the urls
+      if (this.hasUrl(message)) {
+        const urls = this.getUrls(message);
+        for (const url of urls) {
+          if (this.spamurls.has(url)) { continue; }
+          this.logger.info(`New spam url: ${url}`)
+          this.spamurls.add(url);
+
+          await Url.query().insert({
+            url,
+            spam: true,
+          });
+        }
+      }
     } else {
       this.logger.debug(`New person! ${tags.username}`)
       this.people.add(tags.username);
@@ -100,11 +253,25 @@ export class Bot {
     }
   }
 
+  public getStatus(): boolean {
+    return this.isConnected;
+  }
+
+  protected hasUrl(str: string): boolean {
+    return !!str.match(/https?:\/\//);
+  }
+
+  protected getUrls(str: string): string[] {
+    return str.match(/(https?:\/\/[^ ]+)/gi);
+  }
+
   protected onDisconnect = async (reason: string) => {
+    this.isConnected = false;
     this.logger.info(`Disconnected from server: ${reason}`);
   }
 
   protected onConnect = async (address: string, port: number) => {
+    this.isConnected = true;
     this.logger.info(`Connected to ${address}:${port}`);
   }
 
@@ -114,6 +281,7 @@ export class Bot {
 
   connect = async () => {
     await this.initClient();
+    await this.initMq();
 
     return this.client.connect();
   }

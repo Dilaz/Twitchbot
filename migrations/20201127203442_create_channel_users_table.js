@@ -5,6 +5,7 @@ exports.up = function (knex) {
     table.timestamp('last_seen_at');
 
     table.integer('channel_id')
+      .notNullable()
       .unsigned()
       .references('id')
       .inTable('channels')
@@ -12,6 +13,7 @@ exports.up = function (knex) {
       .onUpdate('CASCADE');
 
     table.integer('user_id')
+      .notNullable()
       .unsigned()
       .references('id')
       .inTable('users')

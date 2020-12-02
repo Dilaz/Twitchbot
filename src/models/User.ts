@@ -43,8 +43,6 @@ export class User extends Model {
   }
 
   static get relationMappings() {
-    const Channel = require('./Channel');
-
     return {
       channels: {
         relation: Model.ManyToManyRelation,

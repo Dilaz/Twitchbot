@@ -1,4 +1,5 @@
 import { Model, snakeCaseMappers } from "objection";
+import { BannedWord } from './BannedWord';
 import { User } from "./User";
 
 export class Channel extends Model {
@@ -8,7 +9,9 @@ export class Channel extends Model {
 
   users: User[];
 
-  settings: {};
+  bannedWords: BannedWord[];
+
+  settings: { timeoutOnly: boolean };
 
   static get tableName() {
     return 'channels';
@@ -38,8 +41,6 @@ export class Channel extends Model {
   }
 
   static get relationMappings() {
-    const User = require('./User');
-
     return {
       users: {
         relation: Model.ManyToManyRelation,
@@ -53,6 +54,14 @@ export class Channel extends Model {
           to: 'users.id',
         },
       },
+      banned_words: {
+        relation: Model.HasManyRelation,
+        modelClass: BannedWord,
+        join: {
+          from: 'channels.id',
+          to: 'banned_words.channel_id',
+        }
+      }
     };
   }
 }

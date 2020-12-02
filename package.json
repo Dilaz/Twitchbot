@@ -10,6 +10,7 @@
   "author": "Risto \"Dilaz\" Viitanen",
   "license": "MIT",
   "devDependencies": {
+    "@types/amqplib": "^0.5.16",
     "@types/node": "^14.14.9",
     "@types/tmi.js": "^1.4.2",
     "@typescript-eslint/eslint-plugin": "^4.8.2",
@@ -20,6 +21,7 @@
     "typescript": "^4.1.2"
   },
   "dependencies": {
+    "amqplib": "^0.6.0",
     "dotenv": "^8.2.0",
     "knex": "^0.21.12",
     "objection": "^2.2.3",
