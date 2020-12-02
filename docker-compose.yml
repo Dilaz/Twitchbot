@@ -15,10 +15,16 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - ./db_data:/var/lib/postgresql/data
-  # nodejs:
-  #   build:
-  #     context: .
-  #     target: dbot-twitchbot
-  #   container_name: dbot-node
-  #   depends_on:
-  #     - db
+  mq:
+    container_name: dbot-mq
+    image: "rabbitmq:management-alpine"
+    restart: always
+    expose:
+    - ${MQ_UI_PORT}
+    - ${MQ_PORT}
+    ports:
+      - "${MQ_UI_PORT}:15672"
+      - "${MQ_PORT}:5672"
+    environment:
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "guest"

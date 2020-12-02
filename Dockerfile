@@ -1,6 +1,10 @@
 FROM node:14.15-alpine AS build
 
-COPY . .
+COPY src ./src
+COPY package.json .
+COPY package-lock.json .
+COPY tsconfig.json .
+COPY .eslintrc.json .
 
 RUN npm install
 RUN npm install -g typescript
