@@ -69,26 +69,28 @@ export class Bot {
 
     await this.mqChannel.assertQueue(this.mqChannelName, { durable: true });
 
-    await this.mqChannel.consume(this.mqChannelName, (message) => {
+    await this.mqChannel.consume(this.mqChannelName, async (message) => {
       this.logger.debug(`New message: ${message.content}`);
       try {
         const obj = JSON.parse(message.content.toString());
         switch (obj.type) {
           case 'newChannel':
-            this.newChannel(obj.name);
+            await this.newChannel(obj.name);
             break;
           case 'deleteChannel':
-            this.removeChannel(obj.name);
+            await this.removeChannel(obj.name);
             break;
           default:
             this.logger.warn(`Invalid message type: ${obj.type}`);
             break;
         }
-      } catch (e) {
-        this.logger.error(e.toString())
-      } finally {
+
         this.mqChannel.ack(message);
+      } catch (e) {
+        this.logger.error(JSON.stringify(e))
+        this.mqChannel.nack(message, false, false);
       }
+
     }, { consumerTag: 'twitchbot' });
   }
 
@@ -102,7 +104,7 @@ export class Bot {
     const channels = await Channel.query();
     channels.forEach(channel => this.channels.set(`#${channel.name}`, channel));
     this.logger.info(`Found ${this.channels.size} channels`)
-    channels.forEach(channel => this.bannedWordsPerChannel.set(channel.name, []));
+    channels.forEach(channel => this.bannedWordsPerChannel.set(`#${channel.name}`, []));
 
     // Load users
     const users = await User.query();
@@ -119,7 +121,7 @@ export class Bot {
     let regexes = 0;
     const bannedWords = await BannedWord.query().withGraphFetched('channel');
     bannedWords.forEach(word => {
-      const matchWord = word.regex ? new RegExp(word.str) : word.str;
+      const matchWord = word.regex ? new RegExp(word.str, 'i') : word.str;
       regexes += word.regex ? 1 : 0;
       if (!word.channel) {
         this.bannedWords.push(matchWord)
@@ -153,7 +155,10 @@ export class Bot {
   protected async newChannel(name: string) {
     if (this.channels.has(name)) {
       this.logger.warn(`Channel already exists: ${name}`)
-      return;
+      throw { err: 'channel_already_exists' };
+    } else if (!name) {
+      this.logger.warn('Empty channel name!')
+      throw { err: 'empty_channel_name' };
     }
     this.logger.info(`Joining a new channel: ${name}`)
     this.client.join(name);
@@ -167,6 +172,13 @@ export class Bot {
    * @param name Channel name
    */
   protected async removeChannel(name: string) {
+    if (!this.channels.has(name)) {
+      this.logger.warn(`Channel does not exist: ${name}`)
+      throw { err: 'channel_does_not_exist' };
+    } else if (!name) {
+      this.logger.warn('Empty channel name!')
+      throw { err: 'empty_channel_name' };
+    }
     this.logger.info(`Leaving channel: ${name}`)
     this.client.part(name);
 
@@ -196,8 +208,12 @@ export class Bot {
   }
 
   protected onJoin = async (channel: string, username: string, self: boolean) => {
-    if (!self) {
-      this.logger.debug(`${username} joined ${channel}`);
+    if (self) { return; }
+    this.logger.debug(`${username} joined ${channel}`);
+
+    // Check the new user from the list of spambots
+    if (this.spambots.has(username)) {
+      await this.banOrTimeout(channel, username, true);
     }
   }
 
@@ -217,17 +233,7 @@ export class Bot {
     if (this.people.has(tags.username)) { return; }
 
     if ((this.spambots.has(tags.username) || this.checkForBannedStrings(channel, message)) && !tags.mod && !tags.vip) {
-      const channelObj = this.channels.get(channel);
-      if (channelObj.settings?.timeoutOnly) {
-        await this.client.timeout(channel, tags.username, 300, this.banMessage);
-      } else {
-        await this.client.ban(channel, tags.username, this.banMessage);
-      }
-      await User.query().insert({
-        name: tags.username,
-        lastSeenAt: new Date(),
-        isBot: true,
-      });
+      await this.banOrTimeout(channel, tags.username);
 
       // Save the urls
       if (this.hasUrl(message)) {
@@ -250,6 +256,31 @@ export class Bot {
         name: tags.username,
         lastSeenAt: new Date(),
       });
+    }
+  }
+
+  /**
+   * Ban or timeout user according to the settings
+   * @param channel
+   * @param username
+   * @param forceBan Just ban user, no timeouts
+   */
+  private async banOrTimeout(channel: string, username: string, forceBan: boolean = false) {
+    const channelObj = this.channels.get(channel);
+    if (!forceBan && channelObj.settings?.timeoutOnly) {
+      await this.client.timeout(channel, username, 300, this.banMessage);
+    } else {
+      await this.client.ban(channel, username, this.banMessage);
+    }
+
+    if (!this.spambots.has(username)) {
+      await User.query().insert({
+        name: username,
+        lastSeenAt: new Date(),
+        isBot: true,
+      });
+
+      this.spambots.add(username);
     }
   }
 
