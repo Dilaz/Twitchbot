@@ -17,7 +17,7 @@ export class Url extends Model {
   static get jsonSchema() {
     return {
       type: 'object',
-      required: ['name'],
+      required: ['url'],
 
       properties: {
         id: { type: 'integer' },
