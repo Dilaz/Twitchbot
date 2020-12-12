@@ -1,0 +1,21 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: twitchbot-deployment
+  labels:
+    app: twitchbot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: twitchbot
+  template:
+    metadata:
+      labels:
+        app: twitchbot
+    spec:
+      containers:
+      - name: twitchbot
+        image: dbot-twitchbot:latest
+

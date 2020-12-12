@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: twitchbot-config
+  namespace: twitchbot
+  labels:
+    app: twitchbot
+data:
+  POSTGRES_DB: twitchbot
+  POSTGRES_USER: twitchbot
+  POSTGRES_HOST: postgres-postgresql.twitchbot.cluster.local
+  POSTGRES_PORT: 5432
