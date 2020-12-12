@@ -270,7 +270,11 @@ export class Bot {
     if (!forceBan && channelObj.settings?.timeoutOnly) {
       await this.client.timeout(channel, username, 300, this.banMessage);
     } else {
-      await this.client.ban(channel, username, this.banMessage);
+      try {
+        await this.client.ban(channel, username, this.banMessage);
+      } catch (e) {
+        this.logger.error(`Could not ban ${username} in ${channel}. Maybe I'm not a mod?`);
+      }
     }
 
     if (!this.spambots.has(username)) {
