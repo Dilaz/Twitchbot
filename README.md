@@ -33,7 +33,7 @@ Required env variables:
 
 Required if `USE_MQ` is `true`
 `MQ_PORT`: RabbitMQ port
-`MQ_PORT`: RabbitMQ web UI port
+`MQ_UI_PORT`: RabbitMQ web UI port
 `MQ_URL`: RabbitMQ connection url
 
 ```bash
