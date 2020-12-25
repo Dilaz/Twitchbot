@@ -8,5 +8,5 @@ metadata:
 data:
   POSTGRES_DB: twitchbot
   POSTGRES_USER: twitchbot
-  POSTGRES_HOST: postgres-postgresql.twitchbot.cluster.local
-  POSTGRES_PORT: 5432
+  POSTGRES_HOST: twitchbot-postgresql.twitchbot.svc.cluster.local
+  POSTGRES_PORT: "5432"
