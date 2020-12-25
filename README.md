@@ -45,3 +45,10 @@ node dist/main.js
 ```bash
 tsc --watch
 ```
+
+## Kubernetes
+```bash
+kubectl apply -f k8s/twitchbot-configmap.yaml
+kubectl create secret generic -n twitchbot twitchbot-secrets --from-literal=BOT_TOKEN=__TWITCH_BOT_TOKEN__ --from-literal=POSTGRES_PASSWORD=__POSTGRESQL_PASSWORD__
+kubectl apply -f k8s/twitchbot.yaml
+```
