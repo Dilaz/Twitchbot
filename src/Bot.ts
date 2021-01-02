@@ -102,9 +102,9 @@ export class Bot {
 
     // Load channels
     const channels = await Channel.query();
-    channels.forEach(channel => this.channels.set(`#${channel.name}`, channel));
+    channels.forEach(channel => this.channels.set(channel.name, channel));
     this.logger.info(`Found ${this.channels.size} channels`)
-    channels.forEach(channel => this.bannedWordsPerChannel.set(`#${channel.name}`, []));
+    channels.forEach(channel => this.bannedWordsPerChannel.set(channel.name, []));
 
     // Load users
     const users = await User.query();
