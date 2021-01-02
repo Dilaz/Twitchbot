@@ -10,3 +10,6 @@ data:
   POSTGRES_USER: twitchbot
   POSTGRES_HOST: twitchbot-postgresql.twitchbot.svc.cluster.local
   POSTGRES_PORT: "5432"
+  USE_MQ: "true"
+  MQ_PORT: "5672"
+  MQ_UI_PORT: "15671"
