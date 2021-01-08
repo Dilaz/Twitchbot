@@ -21,20 +21,20 @@ npx knex migrate:latest
 ```
 
 ## Running
-Required env variables:
-`BOT_TOKEN`: Twitch bot token
-`POSTGRES_HOST`: Postgres database host (defaults to localhost)
-`POSTGRES_PORT`: Postgres database port (defaults to 5432)
-`POSTGRES_USER`: Postgres database user
-`POSTGRES_PASSWORD`: Postgres database password
+Required env variables:  
+`BOT_TOKEN`: Twitch bot token  
+`POSTGRES_HOST`: Postgres database host (defaults to localhost)  
+`POSTGRES_PORT`: Postgres database port (defaults to 5432)  
+`POSTGRES_USER`: Postgres database user  
+`POSTGRES_PASSWORD`: Postgres database password  
 `POSTGRES_DB`: Postgres database name
 
 `USE_MQ`: `true`/`false` if RabbitMQ should be used to receive updates
 
-Required if `USE_MQ` is `true`
-`MQ_PORT`: RabbitMQ port
-`MQ_UI_PORT`: RabbitMQ web UI port
-`MQ_URL`: RabbitMQ connection url
+Required if `USE_MQ` is `true`  
+`MQ_PORT`: RabbitMQ port  
+`MQ_UI_PORT`: RabbitMQ web UI port  
+`MQ_URL`: RabbitMQ connection url  
 
 ```bash
 docker-compose up -d
