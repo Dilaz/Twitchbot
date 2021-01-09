@@ -1,4 +1,4 @@
-FROM node:14.15-alpine AS build
+FROM node:lts-alpine AS build
 
 COPY src ./src
 COPY package.json .
@@ -11,11 +11,11 @@ RUN npm install -g typescript
 RUN tsc
 RUN npm prune --production
 
-FROM node:14.15-alpine
+FROM node:lts-alpine
 
 WORKDIR /app
 
-COPY --from=build dist/ ./dist
+COPY --from=build dist/ ./
 COPY --from=build node_modules/ ./node_modules
 
-ENTRYPOINT ["node", "dist/main.js"]
+ENTRYPOINT ["node", "main.js"]
