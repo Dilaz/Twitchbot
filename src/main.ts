@@ -7,7 +7,7 @@ const main = async () => {
   await bot.connect();
 }
 
-main().then().catch(e => {
+main().catch(e => {
   console.error(e);
   process.exit();
 })
