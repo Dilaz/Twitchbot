@@ -7,6 +7,7 @@ import { User } from './models/User';
 import { connect as amqpConnect, Connection, Channel as MqChannel } from 'amqplib'
 import { Url } from './models/Url';
 import { BannedWord } from './models/BannedWord';
+import { ChannelUser } from './models/ChannelUser';
 
 require('dotenv').config();
 
@@ -79,6 +80,12 @@ export class Bot {
             break;
           case 'deleteChannel':
             await this.removeChannel(obj.name);
+            break;
+          case 'newSpambot':
+            await this.newSpambot(obj.name);
+            break;
+          case 'deleteSpambot':
+            await this.removeSpambot(obj.name);
             break;
           default:
             this.logger.warn(`Invalid message type: ${obj.type}`);
@@ -161,10 +168,12 @@ export class Bot {
       throw { err: 'empty_channel_name' };
     }
     this.logger.info(`Joining a new channel: ${name}`)
-    this.client.join(name);
+
+    await this.client.join(name);
 
     const channel = await Channel.query().insert({ name });
     this.channels.set(name, channel);
+    this.bannedWordsPerChannel.set(name, []);
   }
 
   /**
@@ -180,10 +189,42 @@ export class Bot {
       throw { err: 'empty_channel_name' };
     }
     this.logger.info(`Leaving channel: ${name}`)
-    this.client.part(name);
+    await this.client.part(name);
 
     this.channels.delete(name);
     await Channel.query().where('name', '=', name).delete();
+  }
+
+  /**
+ * Remove a spambot status from user
+ * @param name User name
+ */
+  protected async removeSpambot(name: string) {
+    if (!this.spambots.has(name)) {
+      this.logger.warn(`Can't find bot called ${name}`);
+      return Promise.resolve();
+    }
+
+    this.logger.info(`Removing ${name} from spambots`)
+    this.spambots.delete(name);
+    return User.query().patch({ isBot: false }).where('name', name);
+  }
+
+  /**
+   * Add a new spambot to the list
+   * @param name User name
+   */
+  protected async newSpambot(name: string) {
+    const user = await User.query().findOne('name', '=', name)
+    if (user) {
+      this.logger.warn('User found, updating it to a spambot')
+      await User.query().patch({ isBot: true }).where('name', user.id);
+    } else {
+      this.logger.info('User not found, create a new one')
+      await User.query().insert({ name, isBot: true });
+    }
+
+    this.spambots.add(name);
   }
 
   /**
@@ -252,8 +293,15 @@ export class Bot {
     } else {
       this.logger.debug(`New person! ${tags.username}`)
       this.people.add(tags.username);
-      await User.query().insert({
+      const user = await User.query().insertAndFetch({
         name: tags.username,
+        lastSeenAt: new Date(),
+      });
+
+      const channelObject = await Channel.query().findOne('name', channel);
+      await ChannelUser.query().insert({
+        channelId: channelObject.id,
+        userId: user.id,
         lastSeenAt: new Date(),
       });
     }
