@@ -10,23 +10,23 @@
   "author": "Risto \"Dilaz\" Viitanen",
   "license": "MIT",
   "devDependencies": {
-    "@types/amqplib": "^0.5.16",
-    "@types/node": "^14.14.9",
-    "@types/tmi.js": "^1.4.2",
-    "@typescript-eslint/eslint-plugin": "^4.8.2",
-    "@typescript-eslint/parser": "^4.8.2",
-    "eslint": "^7.14.0",
+    "@types/amqplib": "^0.5.17",
+    "@types/node": "^14.14.20",
+    "@types/tmi.js": "^1.7.0",
+    "@typescript-eslint/eslint-plugin": "^4.12.0",
+    "@typescript-eslint/parser": "^4.12.0",
+    "eslint": "^7.17.0",
     "eslint-config-airbnb-base": "^14.2.1",
     "eslint-plugin-import": "^2.22.1",
-    "typescript": "^4.1.2"
+    "typescript": "^4.1.3"
   },
   "dependencies": {
     "amqplib": "^0.6.0",
     "dotenv": "^8.2.0",
-    "knex": "^0.21.12",
-    "objection": "^2.2.3",
+    "knex": "^0.21.15",
+    "objection": "^2.2.6",
     "pg": "^8.5.1",
-    "tmi.js": "^1.5.0",
+    "tmi.js": "^1.7.1",
     "tslog": "^2.12.0"
   }
 }
