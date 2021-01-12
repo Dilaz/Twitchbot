@@ -1,5 +1,5 @@
 import { Logger } from 'tslog';
-import { Client } from 'tmi.js';
+import { ChatUserstate, Client } from 'tmi.js';
 import { Channel } from './models/Channel';
 import { knexSnakeCaseMappers, Model } from 'objection';
 import * as Knex from 'knex';
@@ -51,8 +51,6 @@ export class Bot {
 
       ...knexSnakeCaseMappers(),
     });
-
-
   }
 
   private async initMq() {
@@ -149,10 +147,15 @@ export class Bot {
 
 
     this.client.on('message', this.onMessage);
+    this.client.on('action', this.onMessage);
     this.client.on('connected', this.onConnect);
     this.client.on('connecting', this.onConnecting);
     this.client.on('disconnected', this.onDisconnect);
     this.client.on('join', this.onJoin);
+    this.client.on('cheer', this.onCheer);
+    this.client.on('hosted', this.onHosted);
+    this.client.on('raided', this.onRaided);
+    this.client.on('notice', this.onNotice);
   }
 
   /**
@@ -258,23 +261,40 @@ export class Bot {
     }
   }
 
+  protected onCheer = async (channel: string, userstate: ChatUserstate, message: string) => {
+    console.log(userstate);
+    this.logger.info(`${userstate['display-name']} cheered ${channel} with ${userstate.bits} bits: ${message}`);
+  }
+
+  protected onHosted = async (channel: string, username: string, viewers: number, autohost: boolean) => {
+    this.logger.info(`${username} hosted ${channel} with ${viewers} viewers ${autohost && '(autohost)'}`);
+  }
+
+  protected onRaided = async (channel: string, username: string, viewers: number) => {
+    this.logger.info(`${username} raided ${channel} with ${viewers} viewers`);
+  }
+
+  protected onNotice = async (channel: string, msgid: string, message: string) => {
+    this.logger.debug(`Server notice (${msgid}) for ${channel}: ${message}`);
+  }
+
 
   /**
    * Callback for new message
    * @param channel
-   * @param tags
+   * @param userstate
    * @param message
    * @param self
    */
-  protected onMessage = async (channel: string, tags: any, message: string, self: boolean) => {
+  protected onMessage = async (channel: string, userstate: ChatUserstate, message: string, self: boolean) => {
     if (self) { return; }
 
-    this.logger.info(`${tags['display-name']} -> ${channel}: ${message}`);
+    this.logger.info(`${userstate['display-name']} -> ${channel}: ${message}`);
 
-    if (this.people.has(tags.username)) { return; }
+    if (this.people.has(userstate.username)) { return; }
 
-    if ((this.spambots.has(tags.username) || this.checkForBannedStrings(channel, message)) && !tags.mod && !tags.vip) {
-      await this.banOrTimeout(channel, tags.username);
+    if ((this.spambots.has(userstate.username) || this.checkForBannedStrings(channel, message)) && !userstate.mod && !userstate.vip) {
+      await this.banOrTimeout(channel, userstate.username);
 
       // Save the urls
       if (this.hasUrl(message)) {
@@ -291,10 +311,10 @@ export class Bot {
         }
       }
     } else {
-      this.logger.debug(`New person! ${tags.username}`)
-      this.people.add(tags.username);
+      this.logger.debug(`New person! ${userstate.username}`)
+      this.people.add(userstate.username);
       const user = await User.query().insertAndFetch({
-        name: tags.username,
+        name: userstate.username,
         lastSeenAt: new Date(),
       });
 
