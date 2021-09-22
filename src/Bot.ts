@@ -335,7 +335,7 @@ export class Bot {
    */
   private async banOrTimeout(channel: string, username: string, forceBan: boolean = false) {
     const channelObj = this.channels.get(channel);
-    if (!forceBan && channelObj.settings?.timeoutOnly) {
+    if (!forceBan && channelObj?.settings?.timeoutOnly) {
       await this.client.timeout(channel, username, 300, this.banMessage);
     } else {
       try {
