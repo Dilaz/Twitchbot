@@ -174,7 +174,7 @@ export class Bot {
 
     await this.client.join(name);
 
-    const channel = await Channel.query().insert({ name });
+    const channel = await Channel.query().insertAndFetch({ name });
     this.channels.set(name, channel);
     this.bannedWordsPerChannel.set(name, []);
   }
