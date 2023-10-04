@@ -23,7 +23,7 @@
   "dependencies": {
     "amqplib": "^0.8.0",
     "dotenv": "^8.2.0",
-    "knex": "^0.21.15",
+    "knex": "^2.4.0",
     "objection": "^2.2.6",
     "pg": "^8.5.1",
     "tmi.js": "^1.7.1",
